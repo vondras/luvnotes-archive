@@ -9,7 +9,13 @@ services:
     environment:
       TZ: ${TZ:-America/Chicago}
 
-      PLAYGROUND_TOKEN: ${PLAYGROUND_TOKEN}
+      # Authentication: either provide a short-lived PLAYGROUND_TOKEN, or
+      # provide PLAYGROUND_EMAIL + PLAYGROUND_PASSWORD and the importer will
+      # obtain/renew Firebase ID tokens itself.
+      PLAYGROUND_TOKEN: "${PLAYGROUND_TOKEN:-}"
+      PLAYGROUND_EMAIL: "${PLAYGROUND_EMAIL:-}"
+      PLAYGROUND_PASSWORD: "${PLAYGROUND_PASSWORD:-}"
+
       PLAYGROUND_SCHOOL_ID: ${PLAYGROUND_SCHOOL_ID}
       PLAYGROUND_STUDENT_ID: ${PLAYGROUND_STUDENT_ID}
       PLAYGROUND_GUARDIAN_ID: ${PLAYGROUND_GUARDIAN_ID}
