@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import importlib
 import os
-import subprocess
 import sys
 import time
 from dataclasses import dataclass
@@ -282,7 +282,63 @@ def authenticate() -> FirebaseAuth:
     return firebase_lookup(sign_in_custom(second_custom))
 
 
+def run_archive() -> int:
+    """Run the existing archiver with the browser-proven /posts request shape."""
+    archive = importlib.import_module("luvnotes_archive")
+
+    def browser_api_session() -> requests.Session:
+        session = archive.retry_session()
+        headers = playground_headers(os.environ["PLAYGROUND_TOKEN"])
+        headers.update({
+            "guardianId": os.environ["PLAYGROUND_GUARDIAN_ID"],
+            "screen": f"/app/{os.environ['PLAYGROUND_SCHOOL_ID']}/parent/feed",
+        })
+        session.headers.update(headers)
+        return session
+
+    def browser_fetch_page(
+        api: requests.Session,
+        cursor: int | None,
+        cursor_post_id: str | None,
+    ) -> dict[str, Any]:
+        params = {
+            # HAR showed 10. Keep PAGE_SIZE configurable, but use the same
+            # ordinary-feed endpoint rather than mediaOnly=true.
+            "limit": str(archive.PAGE_SIZE),
+            "studentId": archive.STUDENT_ID,
+            "types": "",
+            "origin": "web",
+            "bundleLoadTime": BUNDLE_LOAD_TIME,
+        }
+        if cursor is None:
+            params["reset"] = "true"
+        else:
+            params["startAfter"] = str(cursor)
+            if cursor_post_id:
+                params["cursorPostId"] = cursor_post_id
+
+        response = api.get(
+            f"{archive.API_ROOT}/{archive.SCHOOL_ID}/posts",
+            params=params,
+            timeout=(15, 60),
+        )
+        if response.status_code in (401, 403):
+            raise RuntimeError(
+                f"Playground posts request rejected (HTTP {response.status_code}): "
+                f"{response.text[:1000]}"
+            )
+        response.raise_for_status()
+        return response.json()
+
+    archive.api_session = browser_api_session
+    archive.fetch_page = browser_fetch_page
+    return int(archive.main())
+
+
 def main() -> int:
+    # Make the same bundle-load timestamp available throughout this process.
+    os.environ.setdefault("PLAYGROUND_BUNDLE_LOAD_TIME", BUNDLE_LOAD_TIME)
+
     if not os.environ.get("PLAYGROUND_TOKEN"):
         auth = authenticate()
         os.environ["PLAYGROUND_TOKEN"] = auth.id_token
@@ -298,7 +354,7 @@ def main() -> int:
             flush=True,
         )
 
-    return subprocess.call([sys.executable, "/app/luvnotes_archive.py"])
+    return run_archive()
 
 
 if __name__ == "__main__":
