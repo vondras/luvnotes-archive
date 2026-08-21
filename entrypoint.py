@@ -283,7 +283,7 @@ def authenticate() -> FirebaseAuth:
 
 
 def run_archive() -> int:
-    """Run the existing archiver with the browser-proven /posts request shape."""
+    """Run the archiver with the browser-proven media-gallery request shape."""
     archive = importlib.import_module("luvnotes_archive")
 
     def browser_api_session() -> requests.Session:
@@ -291,7 +291,7 @@ def run_archive() -> int:
         headers = playground_headers(os.environ["PLAYGROUND_TOKEN"])
         headers.update({
             "guardianId": os.environ["PLAYGROUND_GUARDIAN_ID"],
-            "screen": f"/app/{os.environ['PLAYGROUND_SCHOOL_ID']}/parent/feed",
+            "screen": f"/app/{os.environ['PLAYGROUND_SCHOOL_ID']}/media-gallery",
         })
         session.headers.update(headers)
         return session
@@ -302,11 +302,9 @@ def run_archive() -> int:
         cursor_post_id: str | None,
     ) -> dict[str, Any]:
         params = {
-            # HAR showed 10. Keep PAGE_SIZE configurable, but use the same
-            # ordinary-feed endpoint rather than mediaOnly=true.
             "limit": str(archive.PAGE_SIZE),
             "studentId": archive.STUDENT_ID,
-            "types": "",
+            "mediaOnly": "true",
             "origin": "web",
             "bundleLoadTime": BUNDLE_LOAD_TIME,
         }
