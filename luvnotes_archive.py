@@ -59,7 +59,7 @@ def api_session() -> requests.Session:
     s.headers.update({
         "Accept": "application/json",
         "Authorization": f"Bearer {TOKEN}",
-        "guardianId": GUARDIAN_ID,
+        "Guardianid": GUARDIAN_ID,
         "Origin": "https://luvnotes.littlesunshine.com",
         "Referer": "https://luvnotes.littlesunshine.com/",
     })
