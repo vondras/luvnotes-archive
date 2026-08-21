@@ -11,7 +11,8 @@ services:
 
       # Authentication: either provide a short-lived PLAYGROUND_TOKEN, or
       # provide PLAYGROUND_EMAIL + PLAYGROUND_PASSWORD and the importer will
-      # obtain/renew Firebase ID tokens itself.
+      # obtain a fresh actor-scoped Firebase ID token at startup and refresh it
+      # during long archive runs when possible.
       PLAYGROUND_TOKEN: "${PLAYGROUND_TOKEN:-}"
       PLAYGROUND_EMAIL: "${PLAYGROUND_EMAIL:-}"
       PLAYGROUND_PASSWORD: "${PLAYGROUND_PASSWORD:-}"
@@ -23,6 +24,12 @@ services:
       ARCHIVE_ROOT: /archive
       PHOTOS_ROOT: /photos
       PAGE_SIZE: ${PAGE_SIZE:-50}
+
+      # Optional recovery/debug controls.
+      # PLAYGROUND_START_AFTER is an epoch-millisecond media-gallery seek
+      # boundary used only for the first request (with reset=true).
+      PLAYGROUND_START_AFTER: "${PLAYGROUND_START_AFTER:-}"
+      EXIFTOOL_TIMEOUT_SECONDS: ${EXIFTOOL_TIMEOUT_SECONDS:-90}
 
     volumes:
       - ${LUVNOTES_ARCHIVE_PATH:-/volume1/docker/luvnotes/archive}:/archive
