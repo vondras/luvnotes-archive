@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import base64
+import json
 import os
 import subprocess
 import sys
@@ -36,6 +38,53 @@ def _json_error(prefix: str, response: requests.Response) -> RuntimeError:
     return RuntimeError(
         f"{prefix} (HTTP {response.status_code}): {response.text[:1000]}"
     )
+
+
+def _decode_jwt_payload_unverified(token: str) -> dict:
+    """Decode JWT payload for diagnostics only; this does not verify authenticity."""
+    try:
+        parts = token.split(".")
+        if len(parts) != 3:
+            return {}
+        payload = parts[1] + "=" * (-len(parts[1]) % 4)
+        return json.loads(base64.urlsafe_b64decode(payload).decode("utf-8"))
+    except Exception:
+        return {}
+
+
+def _safe_auth_metadata(token: str) -> dict:
+    """Return non-secret JWT metadata suitable for logs."""
+    claims = _decode_jwt_payload_unverified(token)
+    firebase = claims.get("firebase") if isinstance(claims.get("firebase"), dict) else {}
+
+    standard = {
+        "iss",
+        "aud",
+        "sub",
+        "iat",
+        "exp",
+        "auth_time",
+        "user_id",
+        "email",
+        "email_verified",
+        "firebase",
+    }
+
+    custom_claim_names = sorted(k for k in claims if k not in standard)
+
+    iat = claims.get("iat")
+    exp = claims.get("exp")
+    now = int(time.time())
+
+    return {
+        "iss": claims.get("iss"),
+        "aud": claims.get("aud"),
+        "sign_in_provider": firebase.get("sign_in_provider"),
+        "tenant": firebase.get("tenant"),
+        "age_seconds": (now - iat) if isinstance(iat, int) else None,
+        "expires_in_seconds": (exp - now) if isinstance(exp, int) else None,
+        "custom_claim_names": custom_claim_names,
+    }
 
 
 def luvnotes_id_token() -> str:
@@ -90,6 +139,20 @@ def playground_custom_token(luvnotes_token: str) -> str:
         timeout=(15, 30),
     )
     if not response.ok:
+        metadata = _safe_auth_metadata(luvnotes_token)
+        print(
+            "First-stage Firebase token metadata: "
+            + json.dumps(metadata, sort_keys=True),
+            file=sys.stderr,
+            flush=True,
+        )
+        www_authenticate = response.headers.get("WWW-Authenticate")
+        if www_authenticate:
+            print(
+                f"Playground WWW-Authenticate: {www_authenticate}",
+                file=sys.stderr,
+                flush=True,
+            )
         raise _json_error("Playground custom-token exchange failed", response)
 
     token = response.json().get("token")
