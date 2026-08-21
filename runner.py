@@ -6,6 +6,7 @@ import os
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlsplit
 
 import requests
 
@@ -66,6 +67,46 @@ def authenticate_if_needed() -> None:
         f"{lifetime}; starting archive.",
         flush=True,
     )
+
+
+def normalize_legacy_attachments(payload: dict[str, Any]) -> dict[str, Any]:
+    """Normalize both Playground attachment dialects to the crawler contract.
+
+    Newer responses provide `path`/`source` plus a URL. Older responses provide
+    only `fileName` and a stable pg-image-cache URL. The underlying archiver uses
+    `path` as its durable asset identity, so derive that path from the legacy URL
+    (or, as a fallback, from school + fileName) without retaining URL secrets in
+    persisted post metadata.
+    """
+    school_id = os.environ["PLAYGROUND_SCHOOL_ID"]
+
+    for post in payload.get("data") or []:
+        for attachment in post.get("attachments") or []:
+            if attachment.get("path"):
+                continue
+
+            url = str(attachment.get("url") or "").strip()
+            file_name = str(attachment.get("fileName") or "").strip()
+            derived_path = ""
+            source = ""
+
+            if url:
+                parsed = urlsplit(url)
+                candidate = unquote(parsed.path).lstrip("/")
+                if "/attachments/" in f"/{candidate}":
+                    derived_path = candidate
+                if parsed.hostname == "pg-image-cache.com":
+                    source = "pg-image-cache"
+
+            if not derived_path and file_name:
+                derived_path = f"{school_id}/attachments/{file_name}"
+
+            if derived_path:
+                attachment["path"] = derived_path
+                if source and not attachment.get("source"):
+                    attachment["source"] = source
+
+    return payload
 
 
 def install_exiftool_guard(archive: Any) -> None:
@@ -198,7 +239,7 @@ def run_archive() -> int:
                 f"{response.text[:1000]}"
             )
         response.raise_for_status()
-        return response.json()
+        return normalize_legacy_attachments(response.json())
 
     archive.api_session = media_gallery_session
     archive.fetch_page = media_gallery_fetch_page
