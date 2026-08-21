@@ -13,5 +13,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY luvnotes_archive.py .
 COPY entrypoint.py .
+COPY runner.py .
 
-ENTRYPOINT ["python", "/app/entrypoint.py"]
+ENTRYPOINT ["python", "/app/runner.py"]
