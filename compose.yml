@@ -1,0 +1,38 @@
+services:
+  luvnotes:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: luvnotes-archive
+
+    environment:
+      TZ: ${TZ:-America/Chicago}
+
+      PLAYGROUND_TOKEN: ${PLAYGROUND_TOKEN}
+      PLAYGROUND_SCHOOL_ID: ${PLAYGROUND_SCHOOL_ID}
+      PLAYGROUND_STUDENT_ID: ${PLAYGROUND_STUDENT_ID}
+      PLAYGROUND_GUARDIAN_ID: ${PLAYGROUND_GUARDIAN_ID}
+
+      ARCHIVE_ROOT: /archive
+      PHOTOS_ROOT: /photos
+      PAGE_SIZE: ${PAGE_SIZE:-50}
+
+    volumes:
+      - ${LUVNOTES_ARCHIVE_PATH:-/volume1/docker/luvnotes/archive}:/archive
+      - ${SYNOLOGY_PHOTOS_PATH}:/photos
+
+    user: "${PUID}:${PGID}"
+
+    restart: "no"
+
+    read_only: true
+
+    tmpfs:
+      - /tmp:size=256m
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
