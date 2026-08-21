@@ -69,42 +69,50 @@ def authenticate_if_needed() -> None:
     )
 
 
-def normalize_legacy_attachments(payload: dict[str, Any]) -> dict[str, Any]:
-    """Normalize both Playground attachment dialects to the crawler contract.
+def attachment_source(url: str) -> str:
+    """Classify known historical media backends without persisting URL secrets."""
+    host = (urlsplit(url).hostname or "").lower()
+    if host == "pg-image-cache.com":
+        return "pg-image-cache"
+    if host in {"firebasestorage.googleapis.com", "storage.googleapis.com"}:
+        return "firebase"
+    return ""
 
-    Newer responses provide `path`/`source` plus a URL. Older responses provide
-    only `fileName` and a stable pg-image-cache URL. The underlying archiver uses
-    `path` as its durable asset identity, so derive that path from the legacy URL
-    (or, as a fallback, from school + fileName) without retaining URL secrets in
-    persisted post metadata.
+
+def normalize_legacy_attachments(payload: dict[str, Any]) -> dict[str, Any]:
+    """Normalize historical Playground attachment dialects to one identity.
+
+    The durable logical asset identity is `{school}/attachments/{fileName}`. Newer
+    responses already expose it as `path`; older Firebase and pg-image-cache
+    responses expose only `fileName` plus a backend-specific URL. Never use the
+    complete backend URL path as identity: Firebase URLs contain bucket/API
+    prefixes that changed over time.
     """
     school_id = os.environ["PLAYGROUND_SCHOOL_ID"]
+    marker = f"{school_id}/attachments/"
 
     for post in payload.get("data") or []:
         for attachment in post.get("attachments") or []:
-            if attachment.get("path"):
-                continue
-
             url = str(attachment.get("url") or "").strip()
-            file_name = str(attachment.get("fileName") or "").strip()
-            derived_path = ""
-            source = ""
+            source = attachment_source(url) if url else ""
 
-            if url:
-                parsed = urlsplit(url)
-                candidate = unquote(parsed.path).lstrip("/")
-                if "/attachments/" in f"/{candidate}":
-                    derived_path = candidate
-                if parsed.hostname == "pg-image-cache.com":
-                    source = "pg-image-cache"
+            if not attachment.get("path"):
+                file_name = str(attachment.get("fileName") or "").strip()
+                derived_path = f"{marker}{file_name}" if file_name else ""
 
-            if not derived_path and file_name:
-                derived_path = f"{school_id}/attachments/{file_name}"
+                # Fallback for any legacy attachment lacking fileName: locate the
+                # logical school attachment path inside the decoded backend URL.
+                if not derived_path and url:
+                    candidate = unquote(urlsplit(url).path).lstrip("/")
+                    marker_at = candidate.find(marker)
+                    if marker_at >= 0:
+                        derived_path = candidate[marker_at:]
 
-            if derived_path:
-                attachment["path"] = derived_path
-                if source and not attachment.get("source"):
-                    attachment["source"] = source
+                if derived_path:
+                    attachment["path"] = derived_path
+
+            if source and not attachment.get("source"):
+                attachment["source"] = source
 
     return payload
 
